@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface SubscriptionRepository extends JpaRepository<Subscription, Long> {
@@ -22,4 +23,7 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     @Modifying
     @Query("DELETE FROM Subscription s WHERE s.subscriber = :subscriber AND s.subscribedTo = :subscribedTo")
     void deleteBySubscriberAndSubscribedTo(@Param("subscriber") User subscriber, @Param("subscribedTo") User subscribedTo);
+
+    @Query("SELECT COUNT(s) FROM Subscription s WHERE s.subscribedTo.id = :creatorId AND s.subscribedAt >= :startDate")
+    long countNewSubscribersSince(@Param("creatorId") Long creatorId, @Param("startDate") LocalDateTime startDate);
 }
