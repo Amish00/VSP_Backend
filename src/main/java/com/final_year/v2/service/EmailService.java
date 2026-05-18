@@ -1,10 +1,7 @@
 package com.final_year.v2.service;
 
 import com.final_year.v2.constaint.Role;
-import com.final_year.v2.model.MonthlyEarnings;
-import com.final_year.v2.model.PayoutRequest;
-import com.final_year.v2.model.User;
-import com.final_year.v2.model.Video;
+import com.final_year.v2.model.*;
 import com.final_year.v2.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mail.SimpleMailMessage;
@@ -25,10 +22,18 @@ public class EmailService {
 
     @Autowired
     private UserRepository userRepository;
-    
-    private List<String> getAdminEmails() {
+
+    @Autowired
+    private NotificationService notificationService;   // <-- new
+
+    private List<User> getAdminUsers() {
         return userRepository.findAll().stream()
                 .filter(user -> user.getRole() == Role.ADMIN)
+                .collect(Collectors.toList());
+    }
+
+    private List<String> getAdminEmails() {
+        return getAdminUsers().stream()
                 .map(User::getEmail)
                 .collect(Collectors.toList());
     }
@@ -42,13 +47,14 @@ public class EmailService {
     }
 
     public void sendAdminNewVideoNotification(Video video, User user) {
-        List<String> adminEmails = getAdminEmails();
-        if (adminEmails.isEmpty()) return;
+        List<User> admins = getAdminUsers();
+        if (admins.isEmpty()) return;
 
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(adminEmails.toArray(new String[0]));
-        message.setSubject("New Video Uploaded: " + video.getTitle());
-        message.setText(String.format(
+        // Email
+        SimpleMailMessage emailMsg = new SimpleMailMessage();
+        emailMsg.setTo(getAdminEmails().toArray(new String[0]));
+        emailMsg.setSubject("New Video Uploaded: " + video.getTitle());
+        emailMsg.setText(String.format(
                 "A new video has been uploaded by %s (%s).\n\n" +
                         "Title: %s\n" +
                         "Type: %s\n" +
@@ -56,50 +62,77 @@ public class EmailService {
                         "Please review and approve/reject.",
                 user.getUsername(), user.getEmail(), video.getTitle(), video.getType()
         ));
-        mailSender.send(message);
+        mailSender.send(emailMsg);
+
+        // In-app notifications for each admin
+        for (User admin : admins) {
+            notificationService.createNotification(
+                    admin,
+                    "New Video Pending Approval",
+                    String.format("%s uploaded \"%s\" - needs review.", user.getUsername(), video.getTitle()),
+                    "NEW_VIDEO_UPLOAD",
+                    video.getId().toString()
+            );
+        }
     }
 
     public void sendVideoApprovedNotification(Video video, User user) {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(user.getEmail());
-        message.setSubject("Your video has been approved!");
-        message.setText(String.format(
+        // Email
+        SimpleMailMessage emailMsg = new SimpleMailMessage();
+        emailMsg.setTo(user.getEmail());
+        emailMsg.setSubject("Your video has been approved!");
+        emailMsg.setText(String.format(
                 "Dear %s,\n\n" +
                         "Your video \"%s\" has been approved and is now live.\n" +
                         "Watch it here: http://localhost:3000/watch/%d\n\n" +
                         "Thank you for contributing!",
                 user.getUsername(), video.getTitle(), video.getId()
         ));
-        mailSender.send(message);
+        mailSender.send(emailMsg);
+
+        // In-app notification for the creator
+        notificationService.createNotification(
+                user,
+                "Video Approved",
+                String.format("Your video \"%s\" has been approved and is now live.", video.getTitle()),
+                "VIDEO_APPROVED",
+                video.getId().toString()
+        );
     }
 
     public void sendVideoRejectedNotification(Video video, User user, String reason) {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(user.getEmail());
-        message.setSubject("Your video was not approved");
-        message.setText(String.format(
+        // Email
+        SimpleMailMessage emailMsg = new SimpleMailMessage();
+        emailMsg.setTo(user.getEmail());
+        emailMsg.setSubject("Your video was not approved");
+        emailMsg.setText(String.format(
                 "Dear %s,\n\n" +
                         "Your video \"%s\" has been rejected.\n" +
                         "Reason: %s\n\n" +
                         "Please edit and resubmit if you wish.",
                 user.getUsername(), video.getTitle(), reason
         ));
-        mailSender.send(message);
+        mailSender.send(emailMsg);
+
+        // In-app notification for the creator
+        notificationService.createNotification(
+                user,
+                "Video Rejected",
+                String.format("Your video \"%s\" was rejected. Reason: %s", video.getTitle(), reason),
+                "VIDEO_REJECTED",
+                video.getId().toString()
+        );
     }
 
-    // ---------------------- New monetization methods ----------------------
-
-    /**
-     * Send notification to all admins when a creator requests a payout.
-     */
     public void sendPayoutRequestNotification(PayoutRequest payoutRequest, User creator) {
-        List<String> adminEmails = getAdminEmails();
-        if (adminEmails.isEmpty()) return;
+        List<User> admins = getAdminUsers();
+        if (admins.isEmpty()) return;
 
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(adminEmails.toArray(new String[0]));
-        message.setSubject("💰 New Payout Request from " + creator.getUsername());
-        message.setText(String.format(
+        // Email
+        SimpleMailMessage emailMsg = new SimpleMailMessage();
+        emailMsg.setTo(getAdminEmails().toArray(new String[0]));
+        emailMsg.setSubject("New Payout Request from " + creator.getUsername());
+        emailMsg.setText(String.format(
                 "Hello Admin,\n\n" +
                         "A new payout request has been submitted.\n\n" +
                         "Creator: %s (%s)\n" +
@@ -115,12 +148,20 @@ public class EmailService {
                 payoutRequest.getAccountDetails(),
                 payoutRequest.getRequestedAt()
         ));
-        mailSender.send(message);
+        mailSender.send(emailMsg);
+
+        // In-app notifications for each admin
+        for (User admin : admins) {
+            notificationService.createNotification(
+                    admin,
+                    "New Payout Request",
+                    String.format("%s requested $%.2f (%s).", creator.getUsername(), payoutRequest.getAmount(), payoutRequest.getWithdrawalMethod()),
+                    "PAYOUT_REQUEST",
+                    payoutRequest.getId().toString()
+            );
+        }
     }
 
-    /**
-     * Send monthly earnings report to a creator.
-     */
     public void sendMonthlyEarningsReport(User creator, List<MonthlyEarnings> earningsList, BigDecimal totalEarned, BigDecimal pendingBalance) {
         StringBuilder report = new StringBuilder();
         report.append(String.format("Dear %s,\n\n", creator.getUsername()));
@@ -136,24 +177,32 @@ public class EmailService {
         report.append("http://localhost:3000/creator/earnings\n\n");
         report.append("Thank you for creating with us!");
 
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(creator.getEmail());
-        message.setSubject("📊 Monthly Earnings Report - " + YearMonth.now().minusMonths(1).format(DateTimeFormatter.ofPattern("MMMM yyyy")));
-        message.setText(report.toString());
-        mailSender.send(message);
+        SimpleMailMessage emailMsg = new SimpleMailMessage();
+        emailMsg.setTo(creator.getEmail());
+        emailMsg.setSubject("Monthly Earnings Report - " + YearMonth.now().minusMonths(1).format(DateTimeFormatter.ofPattern("MMMM yyyy")));
+        emailMsg.setText(report.toString());
+        mailSender.send(emailMsg);
+
+        // In-app notification for the creator (short version)
+        String month = YearMonth.now().minusMonths(1).format(DateTimeFormatter.ofPattern("MMMM yyyy"));
+        notificationService.createNotification(
+                creator,
+                "Monthly Earnings Report",
+                String.format("You earned $%.2f in %s. Pending balance: $%.2f", totalEarned, month, pendingBalance),
+                "MONTHLY_EARNINGS",
+                null
+        );
     }
 
-    /**
-     * Send monthly platform revenue report to all admins.
-     */
     public void sendMonthlyRevenueReport(YearMonth reportMonth, BigDecimal totalRevenue, BigDecimal platformFee, BigDecimal creatorPool, int activeSubscriptions, int activeCreators) {
-        List<String> adminEmails = getAdminEmails();
-        if (adminEmails.isEmpty()) return;
+        List<User> admins = getAdminUsers();
+        if (admins.isEmpty()) return;
 
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(adminEmails.toArray(new String[0]));
-        message.setSubject("📈 Monthly Platform Revenue Report - " + reportMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")));
-        message.setText(String.format(
+        // Email
+        SimpleMailMessage emailMsg = new SimpleMailMessage();
+        emailMsg.setTo(getAdminEmails().toArray(new String[0]));
+        emailMsg.setSubject("Monthly Platform Revenue Report - " + reportMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")));
+        emailMsg.setText(String.format(
                 "Hello Admin,\n\n" +
                         "Here is the revenue summary for %s:\n\n" +
                         "━━━━━━━━━━━━━━━━━━━━━━━\n" +
@@ -171,6 +220,19 @@ public class EmailService {
                 totalRevenue, platformFee, creatorPool,
                 activeSubscriptions, activeCreators
         ));
-        mailSender.send(message);
+        mailSender.send(emailMsg);
+
+        // In-app notifications for each admin
+        for (User admin : admins) {
+            notificationService.createNotification(
+                    admin,
+                    "Monthly Revenue Report",
+                    String.format("%s: Total revenue $%.2f | Platform fee $%.2f",
+                            reportMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
+                            totalRevenue, platformFee),
+                    "MONTHLY_REVENUE_REPORT",
+                    null
+            );
+        }
     }
 }
