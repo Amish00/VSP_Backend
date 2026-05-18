@@ -8,6 +8,7 @@ import com.final_year.v2.repository.SubscriptionRepository;
 import com.final_year.v2.repository.UserRepository;
 import com.final_year.v2.security.UserDetailsImpl;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,9 @@ public class SubscriptionService {
 
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Transactional
     public void subscribe(UserDetailsImpl currentUser, Long creatorId) {
