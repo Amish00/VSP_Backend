@@ -162,6 +162,14 @@ public class EmailService {
         }
     }
 
+    public void sendWelcomeEmail(String email) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(email);
+        message.setSubject("Welcome to ViriShare Newsletter!");
+        message.setText("Thank you for subscribing to our newsletter.\n\nYou'll receive weekly creator tips and platform updates.\n\n- ViriShare Team");
+        mailSender.send(message);
+    }
+
     public void sendMonthlyEarningsReport(User creator, List<MonthlyEarnings> earningsList, BigDecimal totalEarned, BigDecimal pendingBalance) {
         StringBuilder report = new StringBuilder();
         report.append(String.format("Dear %s,\n\n", creator.getUsername()));
