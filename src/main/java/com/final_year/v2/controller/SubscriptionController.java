@@ -36,9 +36,12 @@ public class SubscriptionController {
         return ResponseEntity.noContent().build();
     }
 
+    // Updated: currentUser is optional (null if not logged in)
     @GetMapping("/{creatorId}/info")
-    public ResponseEntity<SubscriberCountResponse> getSubscriberInfo(@PathVariable Long creatorId) {
-        return ResponseEntity.ok(subscriptionService.getSubscriberInfo(creatorId));
+    public ResponseEntity<SubscriberCountResponse> getSubscriberInfo(
+            @AuthenticationPrincipal UserDetailsImpl currentUser,
+            @PathVariable Long creatorId) {
+        return ResponseEntity.ok(subscriptionService.getSubscriberInfo(creatorId, currentUser));
     }
 
     @GetMapping("/me")

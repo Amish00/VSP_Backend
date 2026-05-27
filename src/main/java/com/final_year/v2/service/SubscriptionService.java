@@ -20,9 +20,7 @@ public class SubscriptionService {
 
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
-
-    @Autowired
-    private NotificationService notificationService;
+    private final NotificationService notificationService; // if you use it
 
     @Transactional
     public void subscribe(UserDetailsImpl currentUser, Long creatorId) {
@@ -56,12 +54,19 @@ public class SubscriptionService {
         subscriptionRepository.deleteBySubscriberAndSubscribedTo(subscriber, creator);
     }
 
-    public SubscriberCountResponse getSubscriberInfo(Long creatorId) {
+    // Updated method: now accepts currentUser (can be null for unauthenticated requests)
+    public SubscriberCountResponse getSubscriberInfo(Long creatorId, UserDetailsImpl currentUser) {
         User creator = userRepository.findById(creatorId)
                 .orElseThrow(() -> new RuntimeException("Creator not found"));
         long count = subscriptionRepository.countBySubscribedTo(creator);
-        // isSubscribed can be obtained via a separate endpoint or left false for unauthenticated
-        return new SubscriberCountResponse(count, false);
+
+        boolean isSubscribed = false;
+        if (currentUser != null) {
+            User subscriber = userRepository.findById(currentUser.getId())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            isSubscribed = subscriptionRepository.findBySubscriberAndSubscribedTo(subscriber, creator).isPresent();
+        }
+        return new SubscriberCountResponse(count, isSubscribed);
     }
 
     public Page<SubscriptionResponse> getSubscribedChannels(UserDetailsImpl currentUser, Pageable pageable) {

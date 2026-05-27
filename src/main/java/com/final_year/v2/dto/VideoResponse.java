@@ -29,4 +29,6 @@ public class VideoResponse {
     private String profilePicture;
     private String userEmail;
     private Long userId;
+
+    private boolean likedByCurrentUser;
 }

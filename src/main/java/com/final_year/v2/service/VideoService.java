@@ -18,13 +18,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 @Service
 public class VideoService {
@@ -45,10 +43,13 @@ public class VideoService {
     private HistoryService historyService;
 
     @Autowired
-    private EngagementService  engagementService;
+    private EngagementService engagementService;
 
     @Autowired
     private PaymentService paymentService;
+
+    @Autowired
+    private LikeService likeService;  // Injected to check like status
 
     private static final Logger log = LoggerFactory.getLogger(VideoService.class);
 
@@ -56,23 +57,19 @@ public class VideoService {
     public VideoResponse uploadVideo(VideoUploadRequest request,
                                      MultipartFile videoFile,
                                      MultipartFile thumbnailFile) {
-        // Get current logged-in user
         String email = getCurrentUserEmail();
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Generate unique ID for video and thumbnail
         String videoPublicId = "videos/" + UUID.randomUUID().toString();
         String thumbnailPublicId = "thumbnails/" + UUID.randomUUID().toString();
 
-        // Upload files to Cloudinary
         String videoUrl = cloudinaryService.uploadFile(videoFile, "videos", videoPublicId);
         String thumbnailUrl = null;
         if (thumbnailFile != null && !thumbnailFile.isEmpty()) {
             thumbnailUrl = cloudinaryService.uploadFile(thumbnailFile, "thumbnails", thumbnailPublicId);
         }
 
-        // Create Video entity
         Video video = new Video();
         video.setTitle(request.getTitle());
         video.setDescription(request.getDescription());
@@ -82,13 +79,13 @@ public class VideoService {
         video.setVideoUrl(videoUrl);
         video.setThumbnailUrl(thumbnailUrl);
         video.setType(request.getType());
-        video.setStatus(VideoStatus.PENDING); // default pending
+        video.setStatus(VideoStatus.PENDING);
         video.setPublishedAt(LocalDateTime.now());
         video.setUpdatedAt(LocalDateTime.now());
         video.setUser(user);
 
         video = videoRepository.save(video);
-        return convertToResponse(video);
+        return convertToResponse(video, null);
     }
 
     @Transactional
@@ -97,32 +94,38 @@ public class VideoService {
                 .orElseThrow(() -> new RuntimeException("Video not found"));
         videoRepository.incrementViewCount(id);
 
-        // Record watch only for fully authenticated users (not anonymous)
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        UserDetailsImpl currentUser = null;
         if (auth != null && auth.isAuthenticated() && !(auth.getPrincipal() instanceof String && "anonymousUser".equals(auth.getPrincipal()))) {
+            Object principal = auth.getPrincipal();
+            if (principal instanceof UserDetailsImpl) {
+                currentUser = (UserDetailsImpl) principal;
+            }
             try {
                 historyService.recordWatch(id);
                 Long userId = paymentService.getCurrentUserId();
-                engagementService.recordView(userId,id);
+                engagementService.recordView(userId, id);
             } catch (RuntimeException e) {
-                // Log the error but do not let it affect the main transaction
                 log.error("Failed to record watch history or view for video {}: {}", id, e.getMessage());
             }
         }
 
-        return convertToResponse(video);
+        return convertToResponse(video, currentUser);
     }
 
     public Page<VideoResponse> getAllVideos(Pageable pageable) {
+        // For public listing, no current user -> likedByCurrentUser = false
         return videoRepository.findByStatus(VideoStatus.APPROVED, pageable)
-                .map(this::convertToResponse);
+                .map(video -> convertToResponse(video, null));
     }
 
     public Page<VideoResponse> getVideosByUser(String email, Pageable pageable) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        UserDetailsImpl currentUser = getCurrentUserDetails(auth);
         return videoRepository.findByUser(user, pageable)
-                .map(this::convertToResponse);
+                .map(video -> convertToResponse(video, currentUser));
     }
 
     @Transactional
@@ -132,13 +135,11 @@ public class VideoService {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Video not found"));
 
-        // Check ownership (or admin)
         String currentUserEmail = getCurrentUserEmail();
         if (!video.getUser().getEmail().equals(currentUserEmail)) {
             throw new RuntimeException("You are not authorized to update this video");
         }
 
-        // Update metadata
         video.setTitle(request.getTitle());
         video.setDescription(request.getDescription());
         video.setTags(request.getTags());
@@ -146,10 +147,7 @@ public class VideoService {
         video.setPaid(request.isPaid());
         video.setType(request.getType());
 
-        // Update files if provided
         if (newVideoFile != null && !newVideoFile.isEmpty()) {
-            // Delete old from Cloudinary (optional)
-            // cloudinaryService.deleteFile(oldPublicId, "video");
             String newVideoUrl = cloudinaryService.uploadFile(newVideoFile, "videos", UUID.randomUUID().toString());
             video.setVideoUrl(newVideoUrl);
         }
@@ -160,20 +158,21 @@ public class VideoService {
 
         video.setUpdatedAt(LocalDateTime.now());
         video = videoRepository.save(video);
-        return convertToResponse(video);
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        UserDetailsImpl currentUser = getCurrentUserDetails(auth);
+        return convertToResponse(video, currentUser);
     }
 
     @Transactional
     public void deleteVideo(Long id) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Video not found"));
-        // Check ownership or admin
         String currentUserEmail = getCurrentUserEmail();
         if (!video.getUser().getEmail().equals(currentUserEmail)) {
             throw new RuntimeException("Not authorized");
         }
         videoRepository.delete(video);
-        // Optionally delete from Cloudinary (extract public ID from URL)
     }
 
     @Transactional
@@ -184,28 +183,30 @@ public class VideoService {
         videoRepository.save(video);
     }
 
-    private VideoResponse convertToResponse(Video video) {
-        VideoResponse response = new VideoResponse();
-        response.setId(video.getId());
-        response.setTitle(video.getTitle());
-        response.setDescription(video.getDescription());
-        response.setTags(video.getTags());
-        response.setCategory(video.getCategory());
-        response.setPaid(video.isPaid());
-        response.setVideoUrl(video.getVideoUrl());
-        response.setThumbnailUrl(video.getThumbnailUrl());
-        response.setViewCount(video.getViewCount());
-        response.setCommentCount(video.getCommentCount());
-        response.setLikesCount(video.getLikesCount());
-        response.setPublishedAt(video.getPublishedAt());
-        response.setUpdatedAt(video.getUpdatedAt());
-        response.setType(video.getType());
-        response.setStatus(video.getStatus());
-        response.setProfilePicture(video.getUser().getProfilePicture());
-        response.setUsername(video.getUser().getUsername());
-        response.setUserEmail(video.getUser().getEmail());
-        response.setCommentCount(video.getCommentCount());
-        response.setUserId(video.getUser().getId());
+    // Updated convertToResponse with currentUser parameter
+    private VideoResponse convertToResponse(Video video, UserDetailsImpl currentUser) {
+        VideoResponse response = VideoResponse.builder()
+                .id(video.getId())
+                .title(video.getTitle())
+                .description(video.getDescription())
+                .tags(video.getTags())
+                .category(video.getCategory())
+                .isPaid(video.isPaid())
+                .videoUrl(video.getVideoUrl())
+                .thumbnailUrl(video.getThumbnailUrl())
+                .viewCount(video.getViewCount())
+                .commentCount(video.getCommentCount())
+                .likesCount(video.getLikesCount())
+                .publishedAt(video.getPublishedAt())
+                .updatedAt(video.getUpdatedAt())
+                .type(video.getType())
+                .status(video.getStatus())
+                .username(video.getUser().getUsername())
+                .profilePicture(video.getUser().getProfilePicture())
+                .userEmail(video.getUser().getEmail())
+                .userId(video.getUser().getId())
+                .likedByCurrentUser(currentUser != null && likeService.isLikedByUser(currentUser, video.getId()))
+                .build();
         return response;
     }
 
@@ -223,14 +224,21 @@ public class VideoService {
         return auth.getName().toLowerCase();
     }
 
+    private UserDetailsImpl getCurrentUserDetails(Authentication auth) {
+        if (auth == null || !auth.isAuthenticated() || auth.getPrincipal() instanceof String) {
+            return null;
+        }
+        Object principal = auth.getPrincipal();
+        if (principal instanceof UserDetailsImpl) {
+            return (UserDetailsImpl) principal;
+        }
+        return null;
+    }
 
-
-    // Call this inside uploadVideo() after saving the video
     private void notifyAdminOnUpload(Video video) {
         emailService.sendAdminNewVideoNotification(video, video.getUser());
     }
 
-    // Modified status update with reason and email
     @Transactional
     public void updateVideoStatus(Long id, VideoStatus status, String rejectionReason) {
         Video video = videoRepository.findById(id)
@@ -245,7 +253,6 @@ public class VideoService {
         videoRepository.save(video);
     }
 
-    // Admin: get all videos with optional filter and search
     public Page<VideoResponse> getAllVideosForAdmin(String status, String search, Pageable pageable) {
         Page<Video> videoPage;
         VideoStatus videoStatus = null;
@@ -259,10 +266,10 @@ public class VideoService {
         } else {
             videoPage = videoRepository.findAll(pageable);
         }
-        return videoPage.map(this::convertToResponse);
+        // Admin listing: no need to check liked status (optional) but we pass null
+        return videoPage.map(video -> convertToResponse(video, null));
     }
 
-    // Admin: delete any video
     @Transactional
     public void adminDeleteVideo(Long id) {
         Video video = videoRepository.findById(id)
@@ -270,7 +277,6 @@ public class VideoService {
         videoRepository.delete(video);
     }
 
-    // Admin: update video metadata (without file upload)
     @Transactional
     public VideoResponse adminUpdateVideo(Long id, VideoUploadRequest request) {
         Video video = videoRepository.findById(id)
@@ -283,12 +289,13 @@ public class VideoService {
         video.setType(request.getType());
         video.setUpdatedAt(LocalDateTime.now());
         video = videoRepository.save(video);
-        return convertToResponse(video);
+        // Admin update – no current user context for like status
+        return convertToResponse(video, null);
     }
 
     public Page<VideoResponse> getSubscribedVideos(UserDetailsImpl currentUser, Pageable pageable) {
         return videoRepository.findVideosFromSubscribedChannels(currentUser.getId(), pageable)
-                .map(this::convertToResponse);
+                .map(video -> convertToResponse(video, currentUser));
     }
 
     public Page<VideoResponse> getCurrentUserVideos(Long userId, String status, String search, Pageable pageable) {
@@ -301,7 +308,8 @@ public class VideoService {
             } catch (IllegalArgumentException ignored) {}
         }
         Page<Video> videoPage = videoRepository.findByUserAndFilters(user, videoStatus, search, pageable);
-        return videoPage.map(this::convertToResponse);
+        // For owner's own videos, we can get current user if needed; but we'll pass null because owner may not need liked status.
+        return videoPage.map(video -> convertToResponse(video, null));
     }
 
     @Transactional
