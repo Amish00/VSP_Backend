@@ -5,6 +5,9 @@ import com.final_year.v2.dto.PaymentInitiateRequest;
 import com.final_year.v2.model.*;
 import com.final_year.v2.repository.*;
 import com.final_year.v2.security.UserDetailsImpl;
+import com.stripe.exception.StripeException;
+import com.stripe.model.checkout.Session;
+import com.stripe.param.checkout.SessionCreateParams;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
@@ -115,6 +118,12 @@ public class PaymentService {
             return buildEsewaPayload(payment);
         } else if ("khalti".equalsIgnoreCase(request.getGateway())) {
             return buildKhaltiPayload(payment);
+        } else if ("stripe".equalsIgnoreCase(request.getGateway())) {
+            try {
+                return buildStripePayload(payment);
+            } catch (StripeException e) {
+                throw new RuntimeException("Stripe session creation failed: " + e.getMessage(), e);
+            }
         }
         throw new RuntimeException("Unsupported gateway: " + request.getGateway());
     }
@@ -315,6 +324,76 @@ public class PaymentService {
             return Base64.getEncoder().encodeToString(rawHmac);
         } catch (Exception e) {
             throw new RuntimeException("Signature generation failed", e);
+        }
+    }
+
+    private Map<String, Object> buildStripePayload(Payment payment) throws StripeException {
+        // Amount in paisa (NPR’s smallest unit) – Stripe expects integer in cents/paisa
+        long amountInPaisa = payment.getAmount().multiply(BigDecimal.valueOf(100)).longValue();
+
+        String successUrl = "http://localhost:8080/api/payment/stripe/success?session_id={CHECKOUT_SESSION_ID}";
+        String cancelUrl = "http://localhost:5173/payment/failure";
+
+        SessionCreateParams params = SessionCreateParams.builder()
+                .setMode(SessionCreateParams.Mode.PAYMENT)
+                .setSuccessUrl(successUrl)
+                .setCancelUrl(cancelUrl)
+                .addLineItem(
+                        SessionCreateParams.LineItem.builder()
+                                .setQuantity(1L)
+                                .setPriceData(
+                                        SessionCreateParams.LineItem.PriceData.builder()
+                                                .setCurrency("npr")  // Nepalese Rupee
+                                                .setUnitAmount(amountInPaisa)
+                                                .setProductData(
+                                                        SessionCreateParams.LineItem.PriceData.ProductData.builder()
+                                                                .setName("ViriShare " + payment.getPlanId().substring(0,1).toUpperCase() + payment.getPlanId().substring(1) + " Plan")
+                                                                .addImage("https://yourdomain.com/logo.png") // optional
+                                                                .build()
+                                                )
+                                                .build()
+                                )
+                                .build()
+                )
+                .putMetadata("transaction_id", payment.getTransactionId())
+                .build();
+
+        Session session = Session.create(params);
+
+        // Store Stripe session ID in the pidx field (reused for Stripe)
+        payment.setPidx(session.getId());
+        paymentRepository.save(payment);
+
+        return Map.of("gateway", "stripe", "url", session.getUrl());
+    }
+
+    @Transactional
+    public void verifyStripeSession(String sessionId) {
+        try {
+            Session session = Session.retrieve(sessionId);
+            if (!"complete".equals(session.getPaymentStatus())) {
+                // Mark payment as failed
+                Payment payment = paymentRepository.findByPidx(sessionId)
+                        .orElseThrow(() -> new RuntimeException("Payment not found for session: " + sessionId));
+                payment.setStatus("FAILED");
+                payment.setUpdatedAt(LocalDateTime.now());
+                paymentRepository.save(payment);
+                return;
+            }
+
+            String transactionId = session.getMetadata().get("transaction_id");
+            Payment payment = paymentRepository.findByTransactionId(transactionId)
+                    .orElseThrow(() -> new RuntimeException("Payment not found for transaction: " + transactionId));
+
+            if (!"PENDING".equals(payment.getStatus())) return;
+
+            payment.setStatus("SUCCESS");
+            payment.setUpdatedAt(LocalDateTime.now());
+            paymentRepository.save(payment);
+
+            upgradeUserPlan(payment);
+        } catch (StripeException e) {
+            throw new RuntimeException("Stripe session verification failed", e);
         }
     }
 }

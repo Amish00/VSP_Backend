@@ -1,16 +1,19 @@
 package com.final_year.v2.service;
 
+import com.final_year.v2.dto.AdminPayoutDTO;
 import com.final_year.v2.model.*;
 import com.final_year.v2.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class EarningsService {
@@ -48,8 +51,9 @@ public class EarningsService {
     }
 
     public List<PayoutRequest> getCreatorPayoutHistory(Long creatorId) {
-        User creator = userRepository.findById(creatorId).orElseThrow();
-        return payoutRequestRepository.findByCreatorAndStatusOrderByRequestedAtDesc(creator, null);
+        User creator = userRepository.findById(creatorId)
+                .orElseThrow(() -> new RuntimeException("Creator not found"));
+        return payoutRequestRepository.findByCreatorOrderByRequestedAtDesc(creator);
     }
 
     @Transactional
@@ -70,11 +74,19 @@ public class EarningsService {
 
         // Send email notification to admin
         emailService.sendPayoutRequestNotification(saved, creator);
-
         return saved;
     }
 
     // ----- ADMIN PAYOUT ACTIONS -----
+    // Returns DTOs to avoid circular JSON serialization
+    public List<AdminPayoutDTO> getPendingPayoutsAsDTO() {
+        List<PayoutRequest> pending = payoutRequestRepository.findByStatusOrderByRequestedAtDesc("PENDING");
+        return pending.stream()
+                .map(this::convertToAdminDTO)
+                .collect(Collectors.toList());
+    }
+
+    // Original method kept for internal use if needed
     public List<PayoutRequest> getPendingPayouts() {
         return payoutRequestRepository.findByStatusOrderByRequestedAtDesc("PENDING");
     }
@@ -134,5 +146,26 @@ public class EarningsService {
         return result;
     }
 
-
+    // ----- Helper: convert PayoutRequest -> AdminPayoutDTO -----
+    private AdminPayoutDTO convertToAdminDTO(PayoutRequest request) {
+        AdminPayoutDTO.CreatorSummary creatorSummary = null;
+        if (request.getCreator() != null) {
+            creatorSummary = new AdminPayoutDTO.CreatorSummary(
+                    request.getCreator().getId(),
+                    request.getCreator().getUsername(),
+                    request.getCreator().getEmail()
+            );
+        }
+        return new AdminPayoutDTO(
+                request.getId(),
+                request.getAmount(),
+                request.getWithdrawalMethod(),
+                request.getAccountDetails(),
+                request.getStatus(),
+                request.getRequestedAt(),
+                request.getProcessedAt(),
+                request.getRejectionReason(),
+                creatorSummary
+        );
+    }
 }

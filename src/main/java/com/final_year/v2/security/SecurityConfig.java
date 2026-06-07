@@ -33,12 +33,12 @@ public class SecurityConfig {
     private AuthEntryPointJwt unauthorizedHandler;
 
     @Bean
-    public AuthTokenFilter authenticationJwtTokenFilter(){
+    public AuthTokenFilter authenticationJwtTokenFilter() {
         return new AuthTokenFilter();
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) {
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
         return authConfig.getAuthenticationManager();
     }
 
@@ -57,16 +57,14 @@ public class SecurityConfig {
         return new OAuth2LoginSuccessHandler();
     }
 
-
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) {
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .formLogin(form -> form.disable())
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
@@ -85,6 +83,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/payment/callback/**").permitAll()
                         .requestMatchers("/api/creator/**").authenticated()
                         .requestMatchers("/api/admin/**").authenticated()
+                        .requestMatchers("/api/youtube/**").permitAll()
+                        .requestMatchers("/api/watch/youtube/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2

@@ -8,7 +8,10 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "view_records",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "video_id"}))
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"user_id", "video_id"}),
+                @UniqueConstraint(columnNames = {"session_id", "video_id"})
+        })
 @Data
 @NoArgsConstructor
 public class ViewRecord {
@@ -18,8 +21,11 @@ public class ViewRecord {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id")
     private User user;
+
+    @Column(name = "session_id")
+    private String sessionId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "video_id", nullable = false)

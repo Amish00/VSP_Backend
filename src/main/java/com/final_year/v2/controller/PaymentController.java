@@ -49,4 +49,10 @@ public class PaymentController {
         paymentService.upgradeToFreePlan(userId);
         return ResponseEntity.ok(Map.of("message", "Plan updated to Free"));
     }
+
+    @GetMapping("/stripe/success")
+    public void stripeSuccess(@RequestParam("session_id") String sessionId, HttpServletResponse response) throws IOException {
+        paymentService.verifyStripeSession(sessionId);
+        response.sendRedirect("http://localhost:5173/payment/success");
+    }
 }

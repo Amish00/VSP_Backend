@@ -1,5 +1,7 @@
 package com.final_year.v2.security;
 
+import com.final_year.v2.model.User;
+import com.final_year.v2.repository.UserRepository;
 import com.final_year.v2.security.JwtUtils;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,6 +21,9 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
     @Autowired
     private JwtUtils jwtUtils;
 
+    @Autowired
+    private UserRepository userRepository;
+
     @Value("${app.frontend.url}")
     private String frontendUrl;
 
@@ -27,18 +32,21 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
                                         Authentication authentication) throws IOException {
         OAuth2User oAuth2User = (OAuth2User) authentication.getPrincipal();
 
-        // Extract email
         String email = (String) oAuth2User.getAttributes().get("email");
         if (email == null) {
-            // Fallback for GitHub when email is private
-            email = oAuth2User.getAttributes().get("login") + "@github.com";
+            String login = (String) oAuth2User.getAttributes().get("login");
+            email = login + "@github.com";
         }
+        email = email.toLowerCase();
 
-        // Generate tokens (you can add role/plan claims if needed)
-        String accessToken = jwtUtils.generateTokenForOAuth2(email);
-        String refreshToken = jwtUtils.generateRefreshTokenForOAuth2(email); // optional
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalStateException("User not found after OAuth2 processing"));
 
-        // Redirect to frontend with tokens as query parameters
+        // Generate tokens with up-to-date role/plan
+        String accessToken = jwtUtils.generateAccessTokenForEmail(email, user.getRole().name(), user.getPlan().name());
+        String refreshToken = jwtUtils.generateRefreshTokenForEmail(email);
+
+        // Redirect to frontend with tokens
         String redirectUrl = String.format("%s/oauth2/redirect?access_token=%s&refresh_token=%s",
                 frontendUrl, accessToken, refreshToken);
         getRedirectStrategy().sendRedirect(request, response, redirectUrl);

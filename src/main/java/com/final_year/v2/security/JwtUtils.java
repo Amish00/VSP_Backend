@@ -122,4 +122,27 @@ public class JwtUtils {
                 .signWith(key(), SignatureAlgorithm.HS512)
                 .compact();
     }
+
+    // New method for OAuth2 token generation (without Authentication object)
+    public String generateAccessTokenForEmail(String email, String role, String plan) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("role", role);
+        claims.put("plan", plan);
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject(email)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + jwtExpirationMs))
+                .signWith(key(), SignatureAlgorithm.HS512)
+                .compact();
+    }
+
+    public String generateRefreshTokenForEmail(String email) {
+        return Jwts.builder()
+                .setSubject(email)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + refreshExpirationMs))
+                .signWith(key(), SignatureAlgorithm.HS512)
+                .compact();
+    }
 }

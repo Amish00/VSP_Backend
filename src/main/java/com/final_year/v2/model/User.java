@@ -1,5 +1,6 @@
 package com.final_year.v2.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.final_year.v2.constaint.Plan;
 import com.final_year.v2.constaint.Role;
 import com.final_year.v2.constaint.UserStatus;
@@ -25,7 +26,7 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 20)
+    @Column(nullable = false, unique = true, length = 100)
     private String username;
 
     @Column(length = 120)
@@ -87,6 +88,7 @@ public class User {
     }
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY, optional = true)
+    @JsonIgnore
     private UserProfile profile;
 
     public UserProfile getOrCreateProfile() {

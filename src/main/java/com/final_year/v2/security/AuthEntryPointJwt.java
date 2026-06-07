@@ -1,7 +1,6 @@
 package com.final_year.v2.security;
 
 import java.io.IOException;
-import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
@@ -16,8 +15,12 @@ public class AuthEntryPointJwt implements AuthenticationEntryPoint {
 
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response,
-                         AuthenticationException authException) throws IOException, ServletException {
-        logger.error("Unauthorized error: {}", authException.getMessage());
+                         AuthenticationException authException) throws IOException {
+        // Add request details to make it easier to find which endpoint caused the 401
+        String uri = request.getRequestURI();
+        String qs = request.getQueryString();
+        logger.error("Unauthorized error: {} - {} {}{}", authException.getMessage(), request.getMethod(), uri,
+                (qs != null && !qs.isEmpty() ? "?" + qs : ""));
         response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Error: Unauthorized");
     }
 }

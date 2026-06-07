@@ -10,6 +10,7 @@ import java.util.Optional;
 
 public interface ViewRecordRepository extends JpaRepository<ViewRecord, Long> {
     Optional<ViewRecord> findByUserIdAndVideoId(Long userId, Long videoId);
+    Optional<ViewRecord> findBySessionIdAndVideoId(String sessionId, Long videoId);
     List<ViewRecord> findAllByCreatedAtBetween(LocalDateTime start, LocalDateTime end);
 
     @Query("SELECT v.video.user.id as creatorId, SUM(v.userWeight) as weightedViews " +
@@ -18,9 +19,11 @@ public interface ViewRecordRepository extends JpaRepository<ViewRecord, Long> {
                                              @Param("end") LocalDateTime end);
 
 
-    @Query(value = "SELECT DATE(v.created_at) as date, COUNT(v.id) as count " +
-            "FROM view_records v WHERE v.video_user_id = :creatorId " +
-            "AND v.created_at >= :startDate GROUP BY DATE(v.created_at) ORDER BY date",
+    @Query(value = "SELECT DATE(vr.created_at) as date, COUNT(vr.id) as count " +
+            "FROM view_records vr " +
+            "JOIN videos v ON vr.video_id = v.id " +
+            "WHERE v.user_id = :creatorId AND vr.created_at >= :startDate " +
+            "GROUP BY DATE(vr.created_at) ORDER BY date",
             nativeQuery = true)
     List<Object[]> getDailyViewsForCreator(@Param("creatorId") Long creatorId,
                                            @Param("startDate") LocalDateTime startDate);

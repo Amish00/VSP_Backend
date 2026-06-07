@@ -1,8 +1,10 @@
 package com.final_year.v2.service;
 
+import com.final_year.v2.constaint.VideoStatus;
 import com.final_year.v2.model.*;
 import com.final_year.v2.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
@@ -43,21 +45,57 @@ public class EngagementService {
     }
 
     @Transactional
-    public void recordView(Long userId, Long videoId) {
-        Optional<ViewRecord> existing = viewRecordRepository.findByUserIdAndVideoId(userId, videoId);
-        if (existing.isPresent()) return;
+    public boolean recordView(Long userId, String sessionId, Long videoId) {
+        Video video = videoRepository.findById(videoId).orElse(null);
+        if (video == null || video.getStatus() != VideoStatus.APPROVED) {
+            return false;
+        }
 
-        User user = userRepository.findById(userId).orElseThrow();
-        Video video = videoRepository.findById(videoId).orElseThrow();
+        if (userId != null && video.getUser().getId().equals(userId)) {
+            return false;
+        }
 
-        BigDecimal weight = isPaidUser(user) ? BigDecimal.ONE : new BigDecimal("0.5");
+        if (userId != null) {
+            Optional<ViewRecord> existing = viewRecordRepository.findByUserIdAndVideoId(userId, videoId);
+            if (existing.isPresent()) {
+                return false;
+            }
+        } else if (sessionId != null) {
+            Optional<ViewRecord> existing = viewRecordRepository.findBySessionIdAndVideoId(sessionId, videoId);
+            if (existing.isPresent()) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+
+        // Determine weight
+        BigDecimal weight;
+        if (userId != null) {
+            User user = userRepository.findById(userId).orElseThrow();
+            weight = isPaidUser(user) ? BigDecimal.ONE : new BigDecimal("0.5");
+        } else {
+            weight = new BigDecimal("0.5"); // anonymous = free tier
+        }
 
         ViewRecord vr = new ViewRecord();
-        vr.setUser(user);
+        if (userId != null) {
+            vr.setUser(userRepository.getReferenceById(userId));
+        } else {
+            vr.setSessionId(sessionId);
+        }
         vr.setVideo(video);
         vr.setUserWeight(weight);
         vr.setCreatedAt(LocalDateTime.now());
-        viewRecordRepository.save(vr);
+
+        try {
+            viewRecordRepository.save(vr);
+            videoRepository.incrementViewCount(videoId);
+            return true;
+        } catch (DataIntegrityViolationException e) {
+            // Duplicate key (race condition) – another request already created the record
+            return false;
+        }
     }
 
     private boolean isPaidUser(User user) {

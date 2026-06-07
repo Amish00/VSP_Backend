@@ -1,6 +1,7 @@
 package com.final_year.v2.controller;
 
 import com.final_year.v2.constaint.VideoStatus;
+import com.final_year.v2.constaint.VideoType;
 import com.final_year.v2.dto.VideoResponse;
 import com.final_year.v2.dto.VideoUploadRequest;
 import com.final_year.v2.service.VideoService;
@@ -36,7 +37,12 @@ public class VideoController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<VideoResponse>> getAllVideos(Pageable pageable) {
+    public ResponseEntity<Page<VideoResponse>> getAllVideos(
+            @RequestParam(required = false) VideoType type,
+            Pageable pageable) {
+        if (type != null) {
+            return ResponseEntity.ok(videoService.getAllVideos(type, pageable));
+        }
         return ResponseEntity.ok(videoService.getAllVideos(pageable));
     }
 

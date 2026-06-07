@@ -1,6 +1,7 @@
 package com.final_year.v2.service;
 
 import com.final_year.v2.constaint.VideoStatus;
+import com.final_year.v2.constaint.VideoType;
 import com.final_year.v2.dto.VideoResponse;
 import com.final_year.v2.dto.VideoUploadRequest;
 import com.final_year.v2.model.User;
@@ -88,25 +89,32 @@ public class VideoService {
         return convertToResponse(video, null);
     }
 
+    /**
+     * Fetches a video by ID.
+     * IMPORTANT: This method no longer increments the view count.
+     * Views are recorded exclusively via EngagementService.recordView()
+     * after the frontend verifies meaningful watch time (30+ seconds or end of video).
+     */
     @Transactional
     public VideoResponse getVideoById(Long id) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Video not found"));
-        videoRepository.incrementViewCount(id);
 
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         UserDetailsImpl currentUser = null;
+
         if (auth != null && auth.isAuthenticated() && !(auth.getPrincipal() instanceof String && "anonymousUser".equals(auth.getPrincipal()))) {
             Object principal = auth.getPrincipal();
             if (principal instanceof UserDetailsImpl) {
                 currentUser = (UserDetailsImpl) principal;
             }
             try {
+                // Record watch history for the user's history page (does not affect view count)
                 historyService.recordWatch(id);
-                Long userId = paymentService.getCurrentUserId();
-                engagementService.recordView(userId, id);
+                // (Optional) You could also record watch time segments for analytics here,
+                // but view count is NOT increased here.
             } catch (RuntimeException e) {
-                log.error("Failed to record watch history or view for video {}: {}", id, e.getMessage());
+                log.error("Failed to record watch history for video {}: {}", id, e.getMessage());
             }
         }
 
@@ -320,5 +328,14 @@ public class VideoService {
             throw new RuntimeException("You are not authorized to delete this video");
         }
         videoRepository.delete(video);
+    }
+    public Page<VideoResponse> getAllVideos(VideoType type, Pageable pageable) {
+        Page<Video> videoPage;
+        if (type != null) {
+            videoPage = videoRepository.findByStatusAndType(VideoStatus.APPROVED, type, pageable);
+        } else {
+            videoPage = videoRepository.findByStatus(VideoStatus.APPROVED, pageable);
+        }
+        return videoPage.map(video -> convertToResponse(video, null));
     }
 }
