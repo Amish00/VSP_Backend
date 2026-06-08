@@ -18,6 +18,7 @@ public class LikeService {
     private final LikeRepository likeRepository;
     private final UserRepository userRepository;
     private final VideoRepository videoRepository;
+    private final NotificationService notificationService;   // added
 
     @Transactional
     public void likeVideo(UserDetailsImpl currentUser, Long videoId) {
@@ -36,6 +37,16 @@ public class LikeService {
                 .build();
         likeRepository.save(like);
         videoRepository.incrementLikeCount(videoId);
+
+        if (!video.getUser().getId().equals(user.getId())) {
+            notificationService.createNotification(
+                    video.getUser(),
+                    "New Like",
+                    user.getUsername() + " liked your video: " + video.getTitle(),
+                    "VIDEO_LIKE",
+                    video.getId().toString()
+            );
+        }
     }
 
     @Transactional

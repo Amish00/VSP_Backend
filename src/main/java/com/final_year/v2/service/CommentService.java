@@ -24,6 +24,7 @@ public class CommentService {
     private final CommentRepository commentRepository;
     private final UserRepository userRepository;
     private final VideoRepository videoRepository;
+    private final NotificationService notificationService;   // added
 
     @Transactional
     public CommentResponse addComment(CommentRequest request) {
@@ -41,8 +42,18 @@ public class CommentService {
                 .build();
         comment = commentRepository.save(comment);
 
-        // Increment comment count in Video entity
         videoRepository.incrementCommentCount(video.getId());
+
+
+        if (!video.getUser().getId().equals(user.getId())) {
+            notificationService.createNotification(
+                    video.getUser(),
+                    "New Comment",
+                    user.getUsername() + " commented on your video: " + video.getTitle(),
+                    "NEW_COMMENT",
+                    video.getId().toString()
+            );
+        }
 
         return mapToResponse(comment);
     }
@@ -61,7 +72,6 @@ public class CommentService {
             throw new RuntimeException("Not authorized to delete this comment");
         }
         commentRepository.delete(comment);
-        // Decrement comment count in Video
         videoRepository.decrementCommentCount(comment.getVideo().getId());
     }
 
@@ -70,7 +80,6 @@ public class CommentService {
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new RuntimeException("Comment not found"));
         commentRepository.incrementLikeCount(commentId);
-        // Optional: track which user liked (avoid duplicates) – not implemented here for brevity
     }
 
     @Transactional

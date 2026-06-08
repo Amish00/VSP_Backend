@@ -47,4 +47,13 @@ public class NotificationController {
         long count = notificationService.getUnreadCount(user);
         return ResponseEntity.ok(new UnreadCountResponse(count));
     }
+
+    @PutMapping("/{id}/read")
+    public ResponseEntity<Void> markAsRead(@AuthenticationPrincipal UserDetailsImpl currentUser,
+                                           @PathVariable Long id) {
+        User user = userRepository.findById(currentUser.getId())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        notificationService.markAsRead(id, user);
+        return ResponseEntity.ok().build();
+    }
 }

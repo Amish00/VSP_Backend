@@ -8,7 +8,6 @@ import com.final_year.v2.repository.SubscriptionRepository;
 import com.final_year.v2.repository.UserRepository;
 import com.final_year.v2.security.UserDetailsImpl;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -20,7 +19,7 @@ public class SubscriptionService {
 
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
-    private final NotificationService notificationService; // if you use it
+    private final NotificationService notificationService;   // added
 
     @Transactional
     public void subscribe(UserDetailsImpl currentUser, Long creatorId) {
@@ -42,6 +41,14 @@ public class SubscriptionService {
                 .subscribedTo(creator)
                 .build();
         subscriptionRepository.save(subscription);
+
+        notificationService.createNotification(
+                creator,
+                "New Subscriber",
+                subscriber.getUsername() + " subscribed to your channel.",
+                "NEW_SUBSCRIBER",
+                subscription.getId().toString()
+        );
     }
 
     @Transactional
@@ -54,7 +61,6 @@ public class SubscriptionService {
         subscriptionRepository.deleteBySubscriberAndSubscribedTo(subscriber, creator);
     }
 
-    // Updated method: now accepts currentUser (can be null for unauthenticated requests)
     public SubscriberCountResponse getSubscriberInfo(Long creatorId, UserDetailsImpl currentUser) {
         User creator = userRepository.findById(creatorId)
                 .orElseThrow(() -> new RuntimeException("Creator not found"));
