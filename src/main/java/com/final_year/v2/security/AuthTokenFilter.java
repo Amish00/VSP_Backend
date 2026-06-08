@@ -26,6 +26,15 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     private static final Logger logger = LoggerFactory.getLogger(AuthTokenFilter.class);
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        String path = request.getRequestURI();
+        // Exclude all OAuth2 related paths and the login callback
+        return path.startsWith("/oauth2/")
+                || path.startsWith("/login/oauth2/code/")
+                || path.equals("/login");
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         try {
@@ -37,20 +46,17 @@ public class AuthTokenFilter extends OncePerRequestFilter {
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-                logger.info("Authenticated user: {}, authorities: {}", email, userDetails.getAuthorities());
-
-                logger.debug("Context after set: {}", SecurityContextHolder.getContext().getAuthentication());
+                logger.debug("Authenticated user: {}, authorities: {}", email, userDetails.getAuthorities());
             }
         } catch (Exception e) {
-            logger.error("Cannot set user authentication: {}", e);
-            SecurityContextHolder.clearContext(); // ensure clean state on error
+            logger.error("Cannot set user authentication: {}", e.getMessage());
+            SecurityContextHolder.clearContext();
         }
         filterChain.doFilter(request, response);
     }
 
     private String parseJwt(HttpServletRequest request) {
         String headerAuth = request.getHeader("Authorization");
-        logger.debug("Authorization header: {}", headerAuth);
         if (StringUtils.hasText(headerAuth) && headerAuth.startsWith("Bearer ")) {
             return headerAuth.substring(7);
         }

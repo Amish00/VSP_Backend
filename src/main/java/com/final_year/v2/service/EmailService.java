@@ -136,7 +136,7 @@ public class EmailService {
                 "Hello Admin,\n\n" +
                         "A new payout request has been submitted.\n\n" +
                         "Creator: %s (%s)\n" +
-                        "Amount: $%.2f\n" +
+                        "Amount: Rs.%.2f\n" +
                         "Method: %s\n" +
                         "Account: %s\n" +
                         "Requested at: %s\n\n" +
@@ -155,7 +155,7 @@ public class EmailService {
             notificationService.createNotification(
                     admin,
                     "New Payout Request",
-                    String.format("%s requested $%.2f (%s).", creator.getUsername(), payoutRequest.getAmount(), payoutRequest.getWithdrawalMethod()),
+                    String.format("%s requested Rs.%.2f (%s).", creator.getUsername(), payoutRequest.getAmount(), payoutRequest.getWithdrawalMethod()),
                     "PAYOUT_REQUEST",
                     payoutRequest.getId().toString()
             );
@@ -176,11 +176,11 @@ public class EmailService {
         report.append("Here is your earnings report for the past months (most recent first):\n\n");
 
         for (MonthlyEarnings e : earningsList) {
-            report.append(String.format("- %s: $%.2f\n", e.getMonthYear(), e.getEarningsAmount()));
+            report.append(String.format("- %s: Rs.%.2f\n", e.getMonthYear(), e.getEarningsAmount()));
         }
 
-        report.append(String.format("\nTotal earned to date: $%.2f\n", totalEarned));
-        report.append(String.format("Pending balance (available for withdrawal): $%.2f\n\n", pendingBalance));
+        report.append(String.format("\nTotal earned to date: Rs.%.2f\n", totalEarned));
+        report.append(String.format("Pending balance (available for withdrawal): Rs.%.2f\n\n", pendingBalance));
         report.append("You can request a payout from your Earnings page.\n");
         report.append("http://localhost:3000/creator/earnings\n\n");
         report.append("Thank you for creating with us!");
@@ -196,7 +196,7 @@ public class EmailService {
         notificationService.createNotification(
                 creator,
                 "Monthly Earnings Report",
-                String.format("You earned $%.2f in %s. Pending balance: $%.2f", totalEarned, month, pendingBalance),
+                String.format("You earned Rs.%.2f in %s. Pending balance: Rs.%.2f", totalEarned, month, pendingBalance),
                 "MONTHLY_EARNINGS",
                 null
         );
@@ -214,9 +214,9 @@ public class EmailService {
                 "Hello Admin,\n\n" +
                         "Here is the revenue summary for %s:\n\n" +
                         "━━━━━━━━━━━━━━━━━━━━━━━\n" +
-                        "Total Subscription Revenue: $%.2f\n" +
-                        "Platform Fee (30%%):        $%.2f\n" +
-                        "Creator Earnings Pool:      $%.2f\n" +
+                        "Total Subscription Revenue: RS.%.2f\n" +
+                        "Platform Fee (30%%):        Rs.%.2f\n" +
+                        "Creator Earnings Pool:      Rs.%.2f\n" +
                         "━━━━━━━━━━━━━━━━━━━━━━━\n" +
                         "Active Subscriptions:       %d\n" +
                         "Active Creators:            %d\n" +
@@ -235,7 +235,7 @@ public class EmailService {
             notificationService.createNotification(
                     admin,
                     "Monthly Revenue Report",
-                    String.format("%s: Total revenue $%.2f | Platform fee $%.2f",
+                    String.format("%s: Total revenue Rs.%.2f | Platform fee Rs.%.2f",
                             reportMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
                             totalRevenue, platformFee),
                     "MONTHLY_REVENUE_REPORT",

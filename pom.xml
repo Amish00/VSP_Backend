@@ -152,6 +152,36 @@
             <version>7.10.2</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- Strip Payment -->
+        <dependency>
+            <groupId>com.stripe</groupId>
+            <artifactId>stripe-java</artifactId>
+            <version>32.3.0-beta.1</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- Core Google API Client Library -->
+        <dependency>
+            <groupId>com.google.api-client</groupId>
+            <artifactId>google-api-client</artifactId>
+            <version>2.7.2</version>
+        </dependency>
+
+        <!-- YouTube API specific module -->
+        <dependency>
+            <groupId>com.google.apis</groupId>
+            <artifactId>google-api-services-youtube</artifactId>
+            <version>v3-rev20250128-2.0.0</version>
+        </dependency>
+
+        <!-- JSON support (if not already present) -->
+        <dependency>
+            <groupId>com.google.http-client</groupId>
+            <artifactId>google-http-client-jackson2</artifactId>
+            <version>1.44.1</version>
+        </dependency>
+
     </dependencies>
 
     <build>

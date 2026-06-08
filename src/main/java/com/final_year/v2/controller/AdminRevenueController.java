@@ -1,8 +1,8 @@
 package com.final_year.v2.controller;
 
 import com.final_year.v2.constaint.Role;
+import com.final_year.v2.dto.AdminPayoutDTO;
 import com.final_year.v2.dto.PaymentProjection;
-import com.final_year.v2.dto.PaymentResponse;
 import com.final_year.v2.model.MonthlyEarnings;
 import com.final_year.v2.model.PayoutRequest;
 import com.final_year.v2.model.RevenueRecord;
@@ -17,7 +17,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -66,9 +65,10 @@ public class AdminRevenueController {
         return ResponseEntity.ok(earningsService.getMonthlyRevenueBreakdown(months));
     }
 
+    // FIXED: Returns DTO to prevent infinite recursion
     @GetMapping("/payouts/pending")
-    public ResponseEntity<List<PayoutRequest>> getPendingPayouts() {
-        return ResponseEntity.ok(earningsService.getPendingPayouts());
+    public ResponseEntity<List<AdminPayoutDTO>> getPendingPayouts() {
+        return ResponseEntity.ok(earningsService.getPendingPayoutsAsDTO());
     }
 
     @PostMapping("/payouts/{id}/process")

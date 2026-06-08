@@ -1,6 +1,7 @@
 package com.final_year.v2.repository;
 
 import com.final_year.v2.constaint.VideoStatus;
+import com.final_year.v2.constaint.VideoType;
 import com.final_year.v2.model.Video;
 import com.final_year.v2.model.User;
 
@@ -77,4 +78,7 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
 
     @Query("SELECT SUM(v.likesCount) FROM Video v WHERE v.user.id = :userId")
     Long sumLikesByUserId(@Param("userId") Long userId);
+
+
+    Page<Video> findByStatusAndType(VideoStatus status, VideoType type, Pageable pageable);
 }

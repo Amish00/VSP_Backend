@@ -14,6 +14,9 @@ import java.util.Optional;
 public interface PayoutRequestRepository extends JpaRepository<PayoutRequest, Long> {
     List<PayoutRequest> findByCreatorAndStatusOrderByRequestedAtDesc(User creator, String status);
     List<PayoutRequest> findByStatusOrderByRequestedAtDesc(String status);
+
+    List<PayoutRequest> findByCreatorOrderByRequestedAtDesc(User creator);
+
     @Query("SELECT SUM(p.amount) FROM PayoutRequest p WHERE p.creator.id = :creatorId AND p.status = :status")
     Optional<BigDecimal> sumAmountByCreatorIdAndStatus(@Param("creatorId") Long creatorId, @Param("status") String status);
 }

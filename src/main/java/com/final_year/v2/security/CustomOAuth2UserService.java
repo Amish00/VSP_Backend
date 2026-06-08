@@ -12,6 +12,7 @@ import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 import java.util.Map;
@@ -24,6 +25,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     private UserRepository userRepository;
 
     @Override
+    @Transactional
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
         OAuth2User oAuth2User = super.loadUser(userRequest);
         return processOAuth2User(userRequest, oAuth2User);
@@ -33,12 +35,11 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         String provider = userRequest.getClientRegistration().getRegistrationId();
         Map<String, Object> attributes = oAuth2User.getAttributes();
 
-        String email;
-        String name;
-        String providerId;
+        String email = null;
+        String name = null;
+        String providerId = null;
         String picture = null;
 
-        // Extract provider-specific attributes
         switch (provider) {
             case "google":
                 email = (String) attributes.get("email");
@@ -46,64 +47,58 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 providerId = (String) attributes.get("sub");
                 picture = (String) attributes.get("picture");
                 break;
-
             case "github":
                 email = (String) attributes.get("email");
-                // GitHub uses 'login' for username and 'id' for providerId
                 name = (String) attributes.get("login");
                 providerId = String.valueOf(attributes.get("id"));
                 picture = (String) attributes.get("avatar_url");
-                // GitHub might not return email if it's private
                 if (email == null) {
-                    email = name + "@github.com"; // fallback for private emails
+                    email = name + "@github.com";
                 }
                 break;
-
             default:
                 throw new IllegalArgumentException("Unsupported provider: " + provider);
         }
 
-        // Find or create user
+        email = email.toLowerCase();
+
+        // Find user by providerId first
         Optional<User> existingUser = userRepository.findByProviderAndProviderId(provider, providerId);
         User user;
 
         if (existingUser.isPresent()) {
             user = existingUser.get();
-            // Update profile picture if changed (for Google/GitHub)
-            if (picture != null && !picture.equals(user.getProfilePicture())) {
-                user.setProfilePicture(picture);
-                userRepository.save(user);
-            }
         } else {
-            // Check if email already exists (maybe registered via normal signup or another provider)
+            // Check by email (maybe registered via normal signup)
             Optional<User> userByEmail = userRepository.findByEmail(email);
             if (userByEmail.isPresent()) {
                 user = userByEmail.get();
-                // Link OAuth2 account to existing user
+                // Link OAuth account to existing user
                 user.setProvider(provider);
                 user.setProviderId(providerId);
-                if (picture != null) user.setProfilePicture(picture);
+                if (picture != null && user.getProfilePicture() == null) {
+                    user.setProfilePicture(picture);
+                }
                 userRepository.save(user);
             } else {
                 // Create new user
                 user = new User();
                 user.setUsername(name != null ? name : email.split("@")[0]);
                 user.setEmail(email);
-                user.setPassword("null");  // No password for OAuth2 users
-                user.setRole(Role.VIEWER);
-                user.setPlan(Plan.FREE);
+                user.setPassword(""); // OAuth users have no password
                 user.setProvider(provider);
                 user.setProviderId(providerId);
+                user.setRole(Role.VIEWER);
+                user.setPlan(Plan.FREE);
                 user.setProfilePicture(picture);
                 userRepository.save(user);
             }
         }
 
-        // Build OAuth2User with appropriate authorities
+        // Build authorities
         return new DefaultOAuth2User(
                 Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())),
                 attributes,
-                // Name attribute key differs by provider
                 provider.equals("github") ? "login" : "email"
         );
     }

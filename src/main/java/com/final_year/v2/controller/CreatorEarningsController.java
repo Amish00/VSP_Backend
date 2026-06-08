@@ -1,5 +1,6 @@
 package com.final_year.v2.controller;
 
+import com.final_year.v2.dto.PayoutResponseDTO;
 import com.final_year.v2.model.MonthlyEarnings;
 import com.final_year.v2.model.PayoutRequest;
 import com.final_year.v2.service.EarningsService;
@@ -8,18 +9,23 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/creator/earnings")
 @PreAuthorize("hasRole('CREATOR')")
 public class CreatorEarningsController {
 
-    @Autowired private EarningsService earningsService;
-    @Autowired private PaymentService paymentService;
+    @Autowired
+    private EarningsService earningsService;
+
+    @Autowired
+    private PaymentService paymentService;
 
     @GetMapping("/summary")
     public ResponseEntity<Map<String, Object>> getSummary() {
@@ -41,9 +47,14 @@ public class CreatorEarningsController {
     }
 
     @GetMapping("/payouts")
-    public ResponseEntity<List<PayoutRequest>> getPayoutHistory() {
+    public ResponseEntity<List<PayoutResponseDTO>> getPayoutHistory() {
         Long userId = paymentService.getCurrentUserId();
-        return ResponseEntity.ok(earningsService.getCreatorPayoutHistory(userId));
+        List<PayoutRequest> payouts = earningsService.getCreatorPayoutHistory(userId);
+        // Convert entities to DTOs
+        List<PayoutResponseDTO> dtos = payouts.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
     }
 
     @PostMapping("/request")
@@ -53,5 +64,19 @@ public class CreatorEarningsController {
         String method = (String) payload.get("method");
         String accountDetails = (String) payload.get("accountDetails");
         return ResponseEntity.ok(earningsService.requestPayout(userId, amount, method, accountDetails));
+    }
+
+    // Helper method to convert PayoutRequest -> PayoutResponseDTO
+    private PayoutResponseDTO convertToDTO(PayoutRequest request) {
+        return new PayoutResponseDTO(
+                request.getId(),
+                request.getAmount(),
+                request.getWithdrawalMethod(),
+                request.getAccountDetails(),
+                request.getStatus(),
+                request.getRequestedAt(),
+                request.getProcessedAt(),
+                request.getRejectionReason()
+        );
     }
 }
