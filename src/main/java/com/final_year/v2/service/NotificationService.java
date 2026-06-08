@@ -56,4 +56,9 @@ public class NotificationService {
                 .createdAt(notification.getCreatedAt())
                 .build();
     }
+
+    @Transactional
+    public void markAsRead(Long notificationId, User user) {
+        notificationRepository.markAsReadForUser(notificationId, user);
+    }
 }

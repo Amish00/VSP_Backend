@@ -39,6 +39,9 @@ public class UserService {
     @Autowired
     private UserProfileRepository userProfileRepository;
 
+    @Autowired
+    private NotificationService notificationService;
+
     public void syncRoleFromPlan(User user) {
         if (user.getRole() == Role.ADMIN) return;
         user.setRole(user.getPlan() == Plan.CREATE ? Role.CREATOR : Role.VIEWER);
@@ -244,6 +247,22 @@ public class UserService {
             syncRoleFromPlan(user);
             user.setSubscriptionExpiry(null);
             userRepository.save(user);
+        }
+    }
+
+    public void notifyAdminsOfNewUser(User newUser) {
+        List<User> admins = userRepository.findAll().stream()
+                .filter(admin -> admin.getRole() == Role.ADMIN)
+                .collect(Collectors.toList());
+
+        for (User admin : admins) {
+            notificationService.createNotification(
+                    admin,
+                    "New User Registered",
+                    String.format("New user '%s' (%s) has joined the platform.", newUser.getUsername(), newUser.getEmail()),
+                    "NEW_USER_REGISTRATION",
+                    newUser.getId().toString()
+            );
         }
     }
 }
