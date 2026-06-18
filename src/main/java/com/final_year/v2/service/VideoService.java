@@ -306,20 +306,6 @@ public class VideoService {
                 .map(video -> convertToResponse(video, currentUser));
     }
 
-    public Page<VideoResponse> getCurrentUserVideos(Long userId, String status, String search, Pageable pageable) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        VideoStatus videoStatus = null;
-        if (status != null && !status.isEmpty() && !"All".equals(status)) {
-            try {
-                videoStatus = VideoStatus.valueOf(status);
-            } catch (IllegalArgumentException ignored) {}
-        }
-        Page<Video> videoPage = videoRepository.findByUserAndFilters(user, videoStatus, search, pageable);
-        // For owner's own videos, we can get current user if needed; but we'll pass null because owner may not need liked status.
-        return videoPage.map(video -> convertToResponse(video, null));
-    }
-
     @Transactional
     public void deleteVideoByOwner(Long videoId, Long userId) {
         Video video = videoRepository.findById(videoId)
@@ -336,6 +322,19 @@ public class VideoService {
         } else {
             videoPage = videoRepository.findByStatus(VideoStatus.APPROVED, pageable);
         }
+        return videoPage.map(video -> convertToResponse(video, null));
+    }
+
+    public Page<VideoResponse> getCurrentUserVideos(Long userId, String status, String search, VideoType type, Pageable pageable) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        VideoStatus videoStatus = null;
+        if (status != null && !status.isEmpty() && !"All".equals(status)) {
+            try {
+                videoStatus = VideoStatus.valueOf(status);
+            } catch (IllegalArgumentException ignored) {}
+        }
+        Page<Video> videoPage = videoRepository.findByUserAndFilters(user, videoStatus, search, type, pageable);
         return videoPage.map(video -> convertToResponse(video, null));
     }
 }

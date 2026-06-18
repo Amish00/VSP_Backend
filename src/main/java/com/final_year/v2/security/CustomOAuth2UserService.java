@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -33,7 +34,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
     private OAuth2User processOAuth2User(OAuth2UserRequest userRequest, OAuth2User oAuth2User) {
         String provider = userRequest.getClientRegistration().getRegistrationId();
-        Map<String, Object> attributes = oAuth2User.getAttributes();
+        Map<String, Object> attributes = new HashMap<>(oAuth2User.getAttributes()); // mutable copy
 
         String email = null;
         String name = null;
@@ -56,20 +57,46 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                     email = name + "@github.com";
                 }
                 break;
+            case "azure":
+                // Multiple possible email fields for Microsoft
+                email = (String) attributes.get("email");
+                if (email == null) email = (String) attributes.get("userPrincipalName");
+                if (email == null) email = (String) attributes.get("preferred_username");
+                name = (String) attributes.get("name");
+                providerId = (String) attributes.get("sub");
+                picture = null;
+                break;
             default:
-                throw new IllegalArgumentException("Unsupported provider: " + provider);
+                throw new OAuth2AuthenticationException("Unsupported provider: " + provider);
         }
 
+        // Validate required fields
+        if (email == null || email.isBlank()) {
+            throw new OAuth2AuthenticationException("Email not returned by " + provider);
+        }
+        if (providerId == null || providerId.isBlank()) {
+            throw new OAuth2AuthenticationException("Provider ID (sub/id) not returned by " + provider);
+        }
         email = email.toLowerCase();
 
-        // Find user by providerId first
+        // Store extracted email in attributes so success handler can use it (optional)
+        attributes.put("extracted_email", email);
+
+        // Find or create user
         Optional<User> existingUser = userRepository.findByProviderAndProviderId(provider, providerId);
         User user;
 
         if (existingUser.isPresent()) {
             user = existingUser.get();
+            // Optionally update name/picture if changed
+            if (name != null && !name.equals(user.getUsername())) {
+                user.setUsername(name);
+            }
+            if (picture != null && user.getProfilePicture() == null) {
+                user.setProfilePicture(picture);
+            }
+            userRepository.save(user);
         } else {
-            // Check by email (maybe registered via normal signup)
             Optional<User> userByEmail = userRepository.findByEmail(email);
             if (userByEmail.isPresent()) {
                 user = userByEmail.get();
@@ -95,11 +122,12 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
             }
         }
 
-        // Build authorities
+        // Build authorities and return OAuth2User
         return new DefaultOAuth2User(
                 Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())),
                 attributes,
-                provider.equals("github") ? "login" : "email"
+                // Use "sub" for all providers except GitHub (which uses "login")
+                provider.equals("github") ? "login" : "sub"
         );
     }
 }
