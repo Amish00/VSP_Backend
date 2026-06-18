@@ -3,6 +3,7 @@ package com.final_year.v2.controller;
 import com.final_year.v2.dto.PaymentInitiateRequest;
 import com.final_year.v2.service.PaymentService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -54,5 +55,16 @@ public class PaymentController {
     public void stripeSuccess(@RequestParam("session_id") String sessionId, HttpServletResponse response) throws IOException {
         paymentService.verifyStripeSession(sessionId);
         response.sendRedirect("http://localhost:5173/payment/success");
+    }
+
+    @GetMapping("/stripe/verify")
+    public ResponseEntity<?> verifyStripe(@RequestParam("session_id") String sessionId) {
+        try {
+            paymentService.verifyStripeSession(sessionId);
+            return ResponseEntity.ok(Map.of("status", "success"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("status", "failed", "message", e.getMessage()));
+        }
     }
 }

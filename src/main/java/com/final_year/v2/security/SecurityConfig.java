@@ -58,6 +58,12 @@ public class SecurityConfig {
     }
 
     @Bean
+    public OAuth2LoginFailureHandler oAuth2LoginFailureHandler() {
+        return new OAuth2LoginFailureHandler();
+    }
+
+
+    @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -92,6 +98,7 @@ public class SecurityConfig {
                         .redirectionEndpoint(redir -> redir.baseUri("/login/oauth2/code/*"))
                         .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService()))
                         .successHandler(oAuth2LoginSuccessHandler())
+                        .failureHandler(new OAuth2LoginFailureHandler())
                 );
 
         http.addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class);

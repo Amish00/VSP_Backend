@@ -1,5 +1,6 @@
 package com.final_year.v2.controller;
 
+import com.final_year.v2.constaint.VideoType;
 import com.final_year.v2.dto.DashboardStatsResponse;
 import com.final_year.v2.dto.VideoResponse;
 import com.final_year.v2.model.User;
@@ -45,9 +46,11 @@ public class CreatorController {
     public ResponseEntity<Page<VideoResponse>> getMyVideos(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) VideoType type,
             @PageableDefault(size = 10, sort = "publishedAt", direction = Sort.Direction.DESC) Pageable pageable,
             @AuthenticationPrincipal UserDetailsImpl currentUser) {
-        Page<VideoResponse> videos = videoService.getCurrentUserVideos(currentUser.getId(), status, search, pageable);
+        Page<VideoResponse> videos = videoService.getCurrentUserVideos(
+                currentUser.getId(), status, search, type, pageable);
         return ResponseEntity.ok(videos);
     }
 

@@ -55,15 +55,6 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
     @Query("SELECT v FROM Video v WHERE v.user.id IN (SELECT s.subscribedTo.id FROM Subscription s WHERE s.subscriber.id = :userId) AND v.status = 'APPROVED' ORDER BY v.publishedAt DESC")
     Page<Video> findVideosFromSubscribedChannels(@Param("userId") Long userId, Pageable pageable);
 
-    // Add this method to VideoRepository.java
-
-    @Query("SELECT v FROM Video v WHERE v.user = :user " +
-            "AND (:status IS NULL OR v.status = :status) " +
-            "AND (:search IS NULL OR LOWER(v.title) LIKE LOWER(CONCAT('%', :search, '%')))")
-    Page<Video> findByUserAndFilters(@Param("user") User user,
-                                     @Param("status") VideoStatus status,
-                                     @Param("search") String search,
-                                     Pageable pageable);
 
     @Query("SELECT v.category, COUNT(v) FROM Video v WHERE v.user.id = :creatorId AND v.status = 'APPROVED' GROUP BY v.category")
     List<Object[]> countByCategoryForCreator(@Param("creatorId") Long creatorId);
@@ -81,4 +72,14 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
 
 
     Page<Video> findByStatusAndType(VideoStatus status, VideoType type, Pageable pageable);
+
+    @Query("SELECT v FROM Video v WHERE v.user = :user " +
+            "AND (:status IS NULL OR v.status = :status) " +
+            "AND (:search IS NULL OR LOWER(v.title) LIKE LOWER(CONCAT('%', :search, '%'))) " +
+            "AND (:type IS NULL OR v.type = :type)")
+    Page<Video> findByUserAndFilters(@Param("user") User user,
+                                     @Param("status") VideoStatus status,
+                                     @Param("search") String search,
+                                     @Param("type") VideoType type,
+                                     Pageable pageable);
 }
