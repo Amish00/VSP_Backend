@@ -76,6 +76,7 @@ public class HistoryService {
                 .username(video.getUser().getUsername())
                 .watchedAt(history.getWatchedAt())
                 .paid(video.isPaid())
+                .type(video.getType() != null ? video.getType().name() : "VIDEO")
                 .build();
     }
 

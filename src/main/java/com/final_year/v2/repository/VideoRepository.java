@@ -82,4 +82,7 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
                                      @Param("search") String search,
                                      @Param("type") VideoType type,
                                      Pageable pageable);
+
+    long countByUserAndStatusAndType(User user, VideoStatus status, VideoType type);
+    long countByUserAndType(User user, VideoType type);
 }
