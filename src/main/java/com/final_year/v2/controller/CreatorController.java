@@ -1,8 +1,10 @@
 package com.final_year.v2.controller;
 
+import com.final_year.v2.constaint.VideoStatus;
 import com.final_year.v2.constaint.VideoType;
 import com.final_year.v2.dto.DashboardStatsResponse;
 import com.final_year.v2.dto.VideoResponse;
+import com.final_year.v2.dto.VideoStatsResponse;
 import com.final_year.v2.model.User;
 import com.final_year.v2.repository.SubscriptionRepository;
 import com.final_year.v2.repository.UserRepository;
@@ -82,5 +84,36 @@ public class CreatorController {
         Long subscriberCount = subscriptionRepository.countBySubscribedTo(creator);
 
         return ResponseEntity.ok(new DashboardStatsResponse(totalViews, totalEarnings, subscriberCount, totalLikes));
+    }
+
+    @GetMapping("/videos/stats")
+    public ResponseEntity<VideoStatsResponse> getVideoStats(@AuthenticationPrincipal UserDetailsImpl currentUser) {
+        User user = userRepository.findById(currentUser.getId())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Video counts
+        long totalVideos = videoRepository.countByUserAndType(user, VideoType.VIDEO);
+        long approvedVideos = videoRepository.countByUserAndStatusAndType(user, VideoStatus.APPROVED, VideoType.VIDEO);
+        long pendingVideos = videoRepository.countByUserAndStatusAndType(user, VideoStatus.PENDING, VideoType.VIDEO);
+        long rejectedVideos = videoRepository.countByUserAndStatusAndType(user, VideoStatus.REJECTED, VideoType.VIDEO);
+
+        // Shorts counts
+        long totalShorts = videoRepository.countByUserAndType(user, VideoType.SHORTS);
+        long approvedShorts = videoRepository.countByUserAndStatusAndType(user, VideoStatus.APPROVED, VideoType.SHORTS);
+        long pendingShorts = videoRepository.countByUserAndStatusAndType(user, VideoStatus.PENDING, VideoType.SHORTS);
+        long rejectedShorts = videoRepository.countByUserAndStatusAndType(user, VideoStatus.REJECTED, VideoType.SHORTS);
+
+        VideoStatsResponse response = VideoStatsResponse.builder()
+                .totalVideos(totalVideos)
+                .approvedVideos(approvedVideos)
+                .pendingVideos(pendingVideos)
+                .rejectedVideos(rejectedVideos)
+                .totalShorts(totalShorts)
+                .approvedShorts(approvedShorts)
+                .pendingShorts(pendingShorts)
+                .rejectedShorts(rejectedShorts)
+                .build();
+
+        return ResponseEntity.ok(response);
     }
 }

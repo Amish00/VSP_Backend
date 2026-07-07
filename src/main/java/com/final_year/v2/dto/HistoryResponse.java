@@ -15,4 +15,5 @@ public class HistoryResponse {
     private String username;
     private LocalDateTime watchedAt;
     private Boolean paid;
+    private String type;
 }
