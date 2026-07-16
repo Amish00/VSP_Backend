@@ -10,6 +10,8 @@ import com.final_year.v2.model.UserProfile;
 import com.final_year.v2.repository.UserProfileRepository;
 import com.final_year.v2.repository.UserRepository;
 import com.final_year.v2.security.UserDetailsImpl;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +47,9 @@ public class UserService {
 
     @Autowired
     private NotificationService notificationService;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     /**
      * Sync role based on plan – non‑admin users get VIEWER for FREE/VIEW, CREATOR for CREATE.
@@ -207,7 +212,54 @@ public class UserService {
         if (!isAdmin && !user.getEmail().equals(currentUserEmail)) {
             throw new RuntimeException("You can only delete your own account");
         }
+
+        cleanupUserDependencies(id);
+
         userRepository.delete(user);
+    }
+
+    private void cleanupUserDependencies(Long userId) {
+        // Auth/session tokens
+        entityManager.createQuery("DELETE FROM PasswordResetToken t WHERE t.user.id = :userId")
+                .setParameter("userId", userId)
+                .executeUpdate();
+        entityManager.createQuery("DELETE FROM RefreshToken t WHERE t.user.id = :userId")
+                .setParameter("userId", userId)
+                .executeUpdate();
+
+        // User-owned direct records
+        entityManager.createQuery("DELETE FROM Notification n WHERE n.user.id = :userId")
+                .setParameter("userId", userId)
+                .executeUpdate();
+        entityManager.createQuery("DELETE FROM RevenueRecord r WHERE r.user.id = :userId")
+                .setParameter("userId", userId)
+                .executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutRequest p WHERE p.creator.id = :userId")
+                .setParameter("userId", userId)
+                .executeUpdate();
+        entityManager.createQuery("DELETE FROM Subscription s WHERE s.subscriber.id = :userId OR s.subscribedTo.id = :userId")
+                .setParameter("userId", userId)
+                .executeUpdate();
+
+        // User-owned video graph
+        entityManager.createQuery("DELETE FROM Comment c WHERE c.user.id = :userId OR c.video.user.id = :userId")
+                .setParameter("userId", userId)
+                .executeUpdate();
+        entityManager.createQuery("DELETE FROM Like l WHERE l.user.id = :userId OR l.video.user.id = :userId")
+                .setParameter("userId", userId)
+                .executeUpdate();
+        entityManager.createQuery("DELETE FROM History h WHERE h.user.id = :userId OR h.video.user.id = :userId")
+                .setParameter("userId", userId)
+                .executeUpdate();
+        entityManager.createQuery("DELETE FROM ViewRecord v WHERE v.user.id = :userId OR v.video.user.id = :userId")
+                .setParameter("userId", userId)
+                .executeUpdate();
+        entityManager.createQuery("DELETE FROM WatchHistory w WHERE w.user.id = :userId OR w.video.user.id = :userId")
+                .setParameter("userId", userId)
+                .executeUpdate();
+        entityManager.createQuery("DELETE FROM Video v WHERE v.user.id = :userId")
+                .setParameter("userId", userId)
+                .executeUpdate();
     }
 
     @Transactional
