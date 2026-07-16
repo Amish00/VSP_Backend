@@ -102,11 +102,25 @@ public class PaymentService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (user.getSubscriptionExpiry() != null && user.getSubscriptionExpiry().isAfter(LocalDateTime.now())) {
+        // 1. Check and expire subscription if needed (this will revert to FREE and clear expiry)
+        userService.checkAndExpireSubscription(user);
+
+        // 2. If user has an active paid plan (not FREE and expiry in future), block
+        if (user.getPlan() != Plan.FREE && user.getSubscriptionExpiry() != null
+                && user.getSubscriptionExpiry().isAfter(LocalDateTime.now())) {
             throw new RuntimeException("You already have an active " + user.getPlan() +
                     " plan until " + user.getSubscriptionExpiry());
         }
 
+        // 3. If user is FREE but still has expiry (shouldn't happen after checkAndExpire), clear it
+        if (user.getPlan() == Plan.FREE && user.getSubscriptionExpiry() != null) {
+            log.warn("User {} is FREE but has expiry set. Clearing it.", user.getEmail());
+            user.setSubscriptionExpiry(null);
+            user.setBillingCycle(null);
+            userRepository.save(user);
+        }
+
+        // 4. Proceed with payment initiation
         String transactionId = UUID.randomUUID().toString();
         Payment payment = new Payment();
         payment.setTransactionId(transactionId);
@@ -223,7 +237,6 @@ public class PaymentService {
 
         Session session = Session.create(params);
 
-        // Store Stripe session ID in the pidx field
         payment.setPidx(session.getId());
         paymentRepository.save(payment);
         log.info("Stripe session created: sessionId={}, transactionId={}", session.getId(), payment.getTransactionId());
@@ -308,22 +321,18 @@ public class PaymentService {
         try {
             log.info("Verifying Stripe session: {}", sessionId);
 
-            // 1. Retrieve Stripe session
             Session session = Session.retrieve(sessionId);
             log.info("Stripe session retrieved: status={}, payment_status={}", session.getStatus(), session.getPaymentStatus());
 
-            // 2. Find our payment record by the stored pidx (which equals sessionId)
             Payment payment = paymentRepository.findByPidx(sessionId)
                     .orElseThrow(() -> new RuntimeException("Payment not found for session: " + sessionId));
             log.info("Found payment record: transactionId={}, currentStatus={}", payment.getTransactionId(), payment.getStatus());
 
-            // 3. If already processed, skip
             if (!"PENDING".equals(payment.getStatus())) {
                 log.info("Payment already processed with status: {}", payment.getStatus());
                 return;
             }
 
-            // 4. Check Stripe payment status
             if (!"complete".equals(session.getPaymentStatus())) {
                 payment.setStatus("FAILED");
                 payment.setUpdatedAt(LocalDateTime.now());
@@ -332,14 +341,12 @@ public class PaymentService {
                 return;
             }
 
-            // 5. (Optional) Verify metadata matches – but even if missing, we still proceed
             String metaTxId = session.getMetadata().get("transaction_id");
             if (metaTxId != null && !metaTxId.equals(payment.getTransactionId())) {
                 log.warn("Metadata transaction_id mismatch: {} vs {}", metaTxId, payment.getTransactionId());
-                // We choose to continue anyway – the pidx link is more reliable
+                // Continue anyway – the pidx link is more reliable
             }
 
-            // 6. Mark payment as SUCCESS and upgrade user
             payment.setStatus("SUCCESS");
             payment.setUpdatedAt(LocalDateTime.now());
             paymentRepository.save(payment);
@@ -383,12 +390,14 @@ public class PaymentService {
             default:
                 throw new RuntimeException("Invalid billing cycle");
         }
+
         user.setPlan(newPlan);
         user.setSubscriptionExpiry(expiry);
+        user.setPreviousPlan(null);                // clear any expired previous plan
+        user.setBillingCycle(payment.getBillingCycle());
         userService.syncRoleFromPlan(user);
         userRepository.save(user);
 
-        // Create revenue subscription
         BigDecimal monthlyAmount = payment.getAmount().divide(BigDecimal.valueOf(months), 2, RoundingMode.HALF_UP);
         RevenueSubscription rs = new RevenueSubscription();
         rs.setUserId(user.getId());
@@ -400,7 +409,6 @@ public class PaymentService {
         rs.setEndDate(expiry);
         revenueSubscriptionRepository.save(rs);
 
-        // Create revenue record
         RevenueRecord revenueRecord = new RevenueRecord();
         revenueRecord.setUser(user);
         revenueRecord.setUsername(user.getUsername());
@@ -414,21 +422,16 @@ public class PaymentService {
         revenueRecord.setSubscriptionEndDate(expiry);
         revenueRecordRepository.save(revenueRecord);
 
-        log.info("User {} upgraded to {} plan until {}", user.getEmail(), newPlan, expiry);
+        log.info("User {} upgraded to {} plan until {} (billing cycle: {})",
+                user.getEmail(), newPlan, expiry, payment.getBillingCycle());
     }
 
     // =========================
-    //  Free plan upgrade
+    //  Free plan upgrade (manual)
     // =========================
     @Transactional
     public void upgradeToFreePlan(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        user.setPlan(Plan.FREE);
-        user.setSubscriptionExpiry(null);
-        userService.syncRoleFromPlan(user);
-        userRepository.save(user);
-        log.info("User {} downgraded to FREE", user.getEmail());
+        userService.upgradeToFreePlan(userId);
     }
 
     // =========================

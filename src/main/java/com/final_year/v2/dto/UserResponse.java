@@ -38,4 +38,8 @@ public class UserResponse {
     private String twitter;
     private String instagram;
     private String bannerUrl;
+
+    private Plan previousPlan;
+    private boolean expired;
+    private String billingCycle;
 }

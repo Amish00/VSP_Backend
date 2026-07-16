@@ -61,6 +61,11 @@ public class User {
     @Column(name = "subscription_expiry")
     private LocalDateTime subscriptionExpiry;
 
+    @Enumerated(EnumType.STRING)
+    private Plan previousPlan;
+
+    private String billingCycle;
+
     // Custom constructor for signup
     public User(String username, String email, String password) {
         this.username = username;

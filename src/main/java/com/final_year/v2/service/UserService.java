@@ -2,14 +2,16 @@ package com.final_year.v2.service;
 
 import com.final_year.v2.constaint.Plan;
 import com.final_year.v2.constaint.Role;
+import com.final_year.v2.constaint.UserStatus;
 import com.final_year.v2.dto.UserResponse;
 import com.final_year.v2.dto.UserUpdateRequest;
-import com.final_year.v2.constaint.UserStatus;
 import com.final_year.v2.model.User;
 import com.final_year.v2.model.UserProfile;
 import com.final_year.v2.repository.UserProfileRepository;
 import com.final_year.v2.repository.UserRepository;
 import com.final_year.v2.security.UserDetailsImpl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -27,6 +29,8 @@ import java.util.stream.Collectors;
 @Service
 public class UserService {
 
+    private static final Logger log = LoggerFactory.getLogger(UserService.class);
+
     @Autowired
     private UserRepository userRepository;
 
@@ -42,12 +46,17 @@ public class UserService {
     @Autowired
     private NotificationService notificationService;
 
+    /**
+     * Sync role based on plan – non‑admin users get VIEWER for FREE/VIEW, CREATOR for CREATE.
+     */
     public void syncRoleFromPlan(User user) {
         if (user.getRole() == Role.ADMIN) return;
         user.setRole(user.getPlan() == Plan.CREATE ? Role.CREATOR : Role.VIEWER);
     }
 
-    // MODIFIED: convertToResponse now includes profile fields
+    /**
+     * Converts User entity to UserResponse DTO, including profile fields.
+     */
     private UserResponse convertToResponse(User user) {
         UserResponse response = new UserResponse();
         response.setId(user.getId());
@@ -60,8 +69,9 @@ public class UserService {
         response.setVideos(user.getVideos());
         response.setProfilePicture(user.getProfilePicture());
         response.setSubscriptionExpiry(user.getSubscriptionExpiry());
+        response.setPreviousPlan(user.getPreviousPlan());
+        response.setBillingCycle(user.getBillingCycle());
 
-        // Populate profile fields if profile exists
         if (user.getProfile() != null) {
             UserProfile p = user.getProfile();
             response.setFullName(p.getFullName());
@@ -78,11 +88,40 @@ public class UserService {
         return response;
     }
 
+    /**
+     * Checks if the user's subscription has expired; if so, reverts to FREE,
+     * stores the previous plan, and clears expiry.
+     */
+    @Transactional
+    public void checkAndExpireSubscription(User user) {
+        if (user.getSubscriptionExpiry() != null && user.getSubscriptionExpiry().isBefore(LocalDateTime.now())) {
+            log.info("Plan expired for user {} (was {}). Reverting to FREE.", user.getEmail(), user.getPlan());
+            user.setPreviousPlan(user.getPlan());
+            user.setPlan(Plan.FREE);
+            user.setSubscriptionExpiry(null);
+            user.setBillingCycle(null);
+            syncRoleFromPlan(user);
+            userRepository.save(user);
+            log.info("User {} reverted to FREE, previous plan: {}", user.getEmail(), user.getPreviousPlan());
+        }
+        // If user is FREE but still has an expiry (should not happen), clear it
+        if (user.getPlan() == Plan.FREE && user.getSubscriptionExpiry() != null) {
+            log.warn("User {} is FREE but has expiry set. Clearing expiry.", user.getEmail());
+            user.setSubscriptionExpiry(null);
+            user.setBillingCycle(null);
+            userRepository.save(user);
+        }
+    }
+
+    /**
+     * Returns the currently authenticated user (with profile) after checking expiry.
+     */
     public User getCurrentUser() {
         String email = getCurrentUserEmail();
-        // fetch with profile to avoid lazy loading
-        return userRepository.findByEmailWithProfile(email)
+        User user = userRepository.findByEmailWithProfile(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        checkAndExpireSubscription(user);
+        return user;
     }
 
     public String getCurrentUserEmail() {
@@ -103,9 +142,11 @@ public class UserService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional
     public UserResponse getUserById(Long id) {
         User user = userRepository.findByIdWithProfile(id)
                 .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
+        checkAndExpireSubscription(user);
         return convertToResponse(user);
     }
 
@@ -118,7 +159,6 @@ public class UserService {
             throw new RuntimeException("You can only update your own profile");
         }
 
-        // Update basic fields
         if (request.getUsername() != null && !request.getUsername().equals(user.getUsername())) {
             if (userRepository.existsByUsername(request.getUsername())) {
                 throw new RuntimeException("Username already taken");
@@ -133,7 +173,6 @@ public class UserService {
         }
         if (request.getProfilePicture() != null) user.setProfilePicture(request.getProfilePicture());
 
-        // Admin-only fields
         if (isAdmin) {
             if (request.getRole() != null) user.setRole(request.getRole());
             if (request.getPlan() != null) {
@@ -144,9 +183,8 @@ public class UserService {
             if (request.getVideos() != null) user.setVideos(request.getVideos());
         }
 
-        // Update or create profile
         UserProfile profile = user.getOrCreateProfile();
-        if(request.getFullName() != null) profile.setFullName(request.getFullName());
+        if (request.getFullName() != null) profile.setFullName(request.getFullName());
         if (request.getPhone() != null) profile.setPhone(request.getPhone());
         if (request.getDob() != null) profile.setDob(request.getDob());
         if (request.getGender() != null) profile.setGender(request.getGender());
@@ -229,25 +267,42 @@ public class UserService {
         }
     }
 
+    /**
+     * Upgrades a user to a new plan (used by PaymentService after successful payment).
+     */
     @Transactional
-    public void upgradePlan(Long userId, Plan newPlan) {
+    public void upgradePlan(Long userId, Plan newPlan, String billingCycle) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
         if (user.getRole() == Role.ADMIN) {
             throw new RuntimeException("Admin users cannot change plan via this method");
         }
         user.setPlan(newPlan);
+        user.setPreviousPlan(null);      // fresh paid plan, clear any expired previous
+        if (newPlan != Plan.FREE) {
+            user.setBillingCycle(billingCycle);
+        } else {
+            user.setBillingCycle(null);
+        }
         syncRoleFromPlan(user);
         userRepository.save(user);
+        log.info("User {} upgraded to {} plan with billing cycle {}", user.getEmail(), newPlan, billingCycle);
     }
 
-    private void checkAndExpireSubscription(User user) {
-        if (user.getSubscriptionExpiry() != null && user.getSubscriptionExpiry().isBefore(LocalDateTime.now())) {
-            user.setPlan(Plan.FREE);
-            syncRoleFromPlan(user);
-            user.setSubscriptionExpiry(null);
-            userRepository.save(user);
-        }
+    /**
+     * Manual downgrade to FREE (triggered by user). Clears previousPlan and billingCycle.
+     */
+    @Transactional
+    public void upgradeToFreePlan(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setPlan(Plan.FREE);
+        user.setSubscriptionExpiry(null);
+        user.setPreviousPlan(null);
+        user.setBillingCycle(null);
+        syncRoleFromPlan(user);
+        userRepository.save(user);
+        log.info("User {} manually downgraded to FREE", user.getEmail());
     }
 
     public void notifyAdminsOfNewUser(User newUser) {
