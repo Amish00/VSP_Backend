@@ -8,6 +8,8 @@ import com.final_year.v2.model.User;
 import com.final_year.v2.model.Video;
 import com.final_year.v2.repository.VideoRepository;
 import com.final_year.v2.repository.UserRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import com.final_year.v2.security.UserDetailsImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -51,6 +53,9 @@ public class VideoService {
 
     @Autowired
     private LikeService likeService;  // Injected to check like status
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private static final Logger log = LoggerFactory.getLogger(VideoService.class);
 
@@ -180,6 +185,7 @@ public class VideoService {
         if (!video.getUser().getEmail().equals(currentUserEmail)) {
             throw new RuntimeException("Not authorized");
         }
+        cleanupVideoDependencies(id);
         videoRepository.delete(video);
     }
 
@@ -282,6 +288,7 @@ public class VideoService {
     public void adminDeleteVideo(Long id) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Video not found"));
+        cleanupVideoDependencies(id);
         videoRepository.delete(video);
     }
 
@@ -313,7 +320,26 @@ public class VideoService {
         if (!video.getUser().getId().equals(userId)) {
             throw new RuntimeException("You are not authorized to delete this video");
         }
+        cleanupVideoDependencies(videoId);
         videoRepository.delete(video);
+    }
+
+    private void cleanupVideoDependencies(Long videoId) {
+        entityManager.createQuery("DELETE FROM Comment c WHERE c.video.id = :videoId")
+                .setParameter("videoId", videoId)
+                .executeUpdate();
+        entityManager.createQuery("DELETE FROM Like l WHERE l.video.id = :videoId")
+                .setParameter("videoId", videoId)
+                .executeUpdate();
+        entityManager.createQuery("DELETE FROM History h WHERE h.video.id = :videoId")
+                .setParameter("videoId", videoId)
+                .executeUpdate();
+        entityManager.createQuery("DELETE FROM ViewRecord v WHERE v.video.id = :videoId")
+                .setParameter("videoId", videoId)
+                .executeUpdate();
+        entityManager.createQuery("DELETE FROM WatchHistory w WHERE w.video.id = :videoId")
+                .setParameter("videoId", videoId)
+                .executeUpdate();
     }
     public Page<VideoResponse> getAllVideos(VideoType type, Pageable pageable) {
         Page<Video> videoPage;
