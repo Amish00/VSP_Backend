@@ -43,9 +43,6 @@ public class VideoService {
     private EmailService emailService;
 
     @Autowired
-    private HistoryService historyService;
-
-    @Autowired
     private EngagementService engagementService;
 
     @Autowired
@@ -94,12 +91,6 @@ public class VideoService {
         return convertToResponse(video, null);
     }
 
-    /**
-     * Fetches a video by ID.
-     * IMPORTANT: This method no longer increments the view count.
-     * Views are recorded exclusively via EngagementService.recordView()
-     * after the frontend verifies meaningful watch time (30+ seconds or end of video).
-     */
     @Transactional
     public VideoResponse getVideoById(Long id) {
         Video video = videoRepository.findById(id)
@@ -112,14 +103,6 @@ public class VideoService {
             Object principal = auth.getPrincipal();
             if (principal instanceof UserDetailsImpl) {
                 currentUser = (UserDetailsImpl) principal;
-            }
-            try {
-                // Record watch history for the user's history page (does not affect view count)
-                historyService.recordWatch(id);
-                // (Optional) You could also record watch time segments for analytics here,
-                // but view count is NOT increased here.
-            } catch (RuntimeException e) {
-                log.error("Failed to record watch history for video {}: {}", id, e.getMessage());
             }
         }
 

@@ -113,7 +113,7 @@ public class AnalyticsService {
 
         Map<String, Object> stats = new HashMap<>();
         stats.put("views", totalViews);
-        stats.put("watchTimeHours", Math.round(watchTimeHours));
+        stats.put("watchTimeHours", watchTimeHours);
         stats.put("newSubscribers", newSubscribers);
         stats.put("ctr", Math.round(ctr * 10) / 10.0);
         return stats;

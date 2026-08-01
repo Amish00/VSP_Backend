@@ -20,6 +20,12 @@ public class HistoryController {
         return ResponseEntity.ok(historyService.getUserHistory(pageable));
     }
 
+    @PostMapping("/{videoId}")
+    public ResponseEntity<Void> recordWatch(@PathVariable Long videoId) {
+        historyService.recordWatch(videoId);
+        return ResponseEntity.ok().build();
+    }
+
     @DeleteMapping
     public ResponseEntity<Void> clearHistory() {
         historyService.clearHistory();
