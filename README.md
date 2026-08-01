@@ -1,14 +1,58 @@
 # ViriShare Backend
 
-REST API for ViriShare — A Localized Video Sharing Platform for Nepal.
+REST API for ViriShare — A Localized Video Sharing Platform for Nepal, built as a Final Year Project (CPP501) at Virinchi College / Asia e University.
+
+## About
+
+ViriShare is a full-stack video sharing platform designed specifically for the Nepali market. The backend provides a secure, role-based REST API supporting three portals — User, Creator, and Admin. It handles everything from authentication and video management to subscription billing, creator monetization, and admin moderation.
+
+The monetization model distributes 70% of the monthly subscription revenue pool to creators based on weighted views and watch time, with 30% retained as platform revenue.
+
+## Features
+
+**Authentication & Security**
+- JWT-based authentication with access and refresh tokens
+- OAuth2 social login — Google, GitHub, and Outlook
+- OTP-based two-factor authentication for password reset
+- Role-based access control — USER, CREATOR, ADMIN
+- BCrypt password hashing
+
+**Video Management**
+- Video upload via multipart form with Cloudinary CDN storage
+- Video status workflow — Pending → Approved / Rejected
+- Support for regular videos and Shorts (short-form content)
+- Free and paid video types
+- View count tracking and like/unlike
+
+**Creator Features**
+- Analytics — views, watch time, subscriber count, CTR
+- Monthly earnings calculation based on weighted engagement scoring
+- Payout request and processing (eSewa / Khalti)
+- Subscriber management
+
+**Payments**
+- eSewa, Khalti, and Stripe payment gateway integration
+- Subscription plans — Monthly VIEW, 6-Month VIEW, Yearly VIEW, Monthly CREATE
+- Yearly plan revenue distributed monthly for stable pool calculation
+
+**Admin**
+- Video moderation with approve/reject and rejection reason
+- User management — update role, plan, and account status
+- Revenue reports and payout processing
+- Platform-wide analytics
+
+**Other**
+- Comment system with pagination
+- In-app notification delivery
+- Multi-language support (i18n-ready)
 
 ## Tech Stack
 
 - **Java 17** + **Spring Boot 3**
-- **Spring Security** — JWT authentication + OAuth2 (Google, GitHub, Outlook)
+- **Spring Security** — JWT + OAuth2
 - **MySQL 8** + Spring Data JPA
-- **Cloudinary** — video storage and CDN delivery
-- **eSewa / Khalti / Stripe** — payment gateway integration
+- **Cloudinary** — video storage and CDN
+- **eSewa / Khalti / Stripe** — payment gateways
 - **BCrypt** — password hashing
 - **Maven** — build tool
 
